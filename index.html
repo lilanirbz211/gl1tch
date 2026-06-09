@@ -180,7 +180,8 @@
     if (el) el.textContent = GLITCH.getUsers().length;
   }
 
-  function tick() {
+  async function tick() {
+    await GLITCH.fetchDB();
     renderLeaderboard();
     renderNews();
     renderMarquee();
@@ -188,7 +189,7 @@
   }
 
   tick();
-  setInterval(tick, 2000);
+  setInterval(tick, 5000);
 
   /* ── TITOLO: SCRAMBLE AL HOVER + CLICK → DISCORD ── */
   var mainTitle = document.getElementById('main-title');
