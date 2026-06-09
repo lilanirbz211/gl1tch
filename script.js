@@ -181,45 +181,84 @@ const GLITCH = (function () {
     `).join('');
   }
 
+  function buildTicketMessages(messages) {
+    return messages.map(m => `
+      <div class="chat-msg">
+        <span class="msg-${m.role === 'staff' ? 'staff' : 'user'}">[${m.sender}]</span>
+        <span class="msg-text"> ${m.text}</span>
+        <span style="font-size:0.65rem;color:rgba(180,160,220,0.4);margin-left:8px;">${new Date(m.time).toLocaleTimeString('it-IT')}</span>
+      </div>
+    `).join('');
+  }
+
   function renderTicketPanel() {
     const container = document.getElementById('tickets-list');
     if (!container) return;
     const tickets = getTickets();
+
     if (tickets.length === 0) {
       container.innerHTML = '<p style="color:var(--text-dim);font-size:0.8rem;">Nessun ticket aperto.</p>';
       return;
     }
-    container.innerHTML = tickets.map(t => `
-      <div class="panel" style="margin-bottom:16px;padding:16px;" id="ticket-${t.id}">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <span style="font-family:Orbitron,sans-serif;font-size:0.75rem;letter-spacing:2px;color:var(--neon-blue);">
-            #${t.id} — ${t.subject}
-          </span>
-          <span class="badge ${t.status === 'open' ? 'badge-open' : 'badge-closed'}">${t.status === 'open' ? 'APERTO' : 'CHIUSO'}</span>
-        </div>
-        <div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:12px;">Utente: <strong style="color:#e0d0ff">${t.username}</strong></div>
-        <div class="chat-box" id="chat-${t.id}">
-          ${t.messages.map(m => `
-            <div class="chat-msg">
-              <span class="msg-${m.role === 'staff' ? 'staff' : 'user'}">[${m.sender}]</span>
-              <span class="msg-text"> ${m.text}</span>
-              <span style="font-size:0.65rem;color:rgba(180,160,220,0.4);margin-left:8px;">${new Date(m.time).toLocaleTimeString('it-IT')}</span>
-            </div>
-          `).join('')}
-        </div>
-        ${t.status === 'open' ? `
-          <div class="admin-input-row">
-            <input type="text" id="reply-${t.id}" placeholder="Scrivi risposta staff..." />
-            <button class="btn btn-green" onclick="GLITCH.staffReply(${t.id})">Rispondi</button>
-            <button class="btn btn-red" onclick="GLITCH.staffClose(${t.id})">Chiudi</button>
-          </div>
-        ` : ''}
-      </div>
-    `).join('');
+
+    const currentIds = new Set(tickets.map(t => String(t.id)));
+
+    /* rimuovi panel di ticket non più esistenti */
+    Array.from(container.querySelectorAll('[id^="ticket-"]')).forEach(el => {
+      if (!currentIds.has(el.id.replace('ticket-', ''))) el.remove();
+    });
 
     tickets.forEach(t => {
-      const box = document.getElementById('chat-' + t.id);
-      if (box) box.scrollTop = box.scrollHeight;
+      let panel = document.getElementById('ticket-' + t.id);
+
+      if (!panel) {
+        /* primo rendering: crea l'intero pannello */
+        panel = document.createElement('div');
+        panel.className = 'panel';
+        panel.style.cssText = 'margin-bottom:16px;padding:16px;';
+        panel.id = 'ticket-' + t.id;
+        panel.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <span style="font-family:Orbitron,sans-serif;font-size:0.75rem;letter-spacing:2px;color:var(--neon-blue);">
+              #${t.id} — ${t.subject}
+            </span>
+            <span class="badge ${t.status === 'open' ? 'badge-open' : 'badge-closed'}" data-badge="${t.id}">${t.status === 'open' ? 'APERTO' : 'CHIUSO'}</span>
+          </div>
+          <div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:12px;">Utente: <strong style="color:#e0d0ff">${t.username}</strong></div>
+          <div class="chat-box" id="chat-${t.id}">${buildTicketMessages(t.messages)}</div>
+          ${t.status === 'open' ? `
+            <div class="admin-input-row" id="reply-row-${t.id}">
+              <input type="text" id="reply-${t.id}" placeholder="Scrivi risposta staff..." />
+              <button class="btn btn-green" onclick="GLITCH.staffReply(${t.id})">Rispondi</button>
+              <button class="btn btn-red" onclick="GLITCH.staffClose(${t.id})">Chiudi</button>
+            </div>
+          ` : ''}
+        `;
+        container.appendChild(panel);
+      } else {
+        /* aggiornamenti successivi: tocca solo chat e badge, MAI l'input */
+        const badge = panel.querySelector('[data-badge]');
+        if (badge) {
+          badge.className = 'badge ' + (t.status === 'open' ? 'badge-open' : 'badge-closed');
+          badge.textContent = t.status === 'open' ? 'APERTO' : 'CHIUSO';
+        }
+
+        const chatBox = document.getElementById('chat-' + t.id);
+        if (chatBox) {
+          const newHTML = buildTicketMessages(t.messages);
+          if (chatBox.innerHTML !== newHTML) {
+            const wasAtBottom = chatBox.scrollTop + chatBox.clientHeight >= chatBox.scrollHeight - 4;
+            chatBox.innerHTML = newHTML;
+            if (wasAtBottom) chatBox.scrollTop = chatBox.scrollHeight;
+          }
+        }
+
+        /* se il ticket è stato chiuso, rimuovi la riga reply */
+        if (t.status === 'closed') {
+          const row = document.getElementById('reply-row-' + t.id);
+          if (row) row.remove();
+        }
+      }
     });
   }
 
