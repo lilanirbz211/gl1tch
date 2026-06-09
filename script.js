@@ -1,7 +1,6 @@
 /* ═══════════════════════════════════════════════
    GLITCH MOTORE PRINCIPALE — script.js
-   Credenziali staff hardcoded sotto.
-   Tutto lo stato è sincronizzato via localStorage/sessionStorage.
+   Database condiviso via JSONBin.io (online, visibile a tutti).
 ═══════════════════════════════════════════════ */
 
 const GLITCH = (function () {
@@ -9,158 +8,141 @@ const GLITCH = (function () {
   /* ── CREDENZIALI STAFF ── */
   const STAFF_USERNAME = 'GLITCH_SYS_CORE_99X!';
   const STAFF_PASSWORD = 'K4yn3#S1lv3r';
+  const KEY_SESSION    = 'glitch_staff_session';
 
-  /* ── CHIAVI STORAGE ── */
-  const KEY_USERS       = 'glitch_users_db';
-  const KEY_TICKETS     = 'glitch_tickets_db';
-  const KEY_NEWS        = 'glitch_news_db';
-  const KEY_LEADERBOARD = 'glitch_leaderboard_db';
-  const KEY_SESSION     = 'glitch_staff_session';
+  /* ── JSONBIN CONFIG ── */
+  const BIN_ID  = '6a285c38f5f4af5e29d39a84';
+  const API_KEY = '$2a$10$Acovl/Avg5lkOB/dMuocD.Lh8EhZF1HrTK6P.YfHC4NXB0yGp3rbe';
+  const BIN_URL = 'https://api.jsonbin.io/v3/b/' + BIN_ID;
 
-  /* ── HELPERS ── */
-  function getUsers() {
-    try { return JSON.parse(localStorage.getItem(KEY_USERS) || '[]'); }
-    catch { return []; }
+  /* ── CACHE IN-MEMORY ── */
+  let DB = { news: [], tickets: [], leaderboard: [], users: [] };
+
+  async function fetchDB() {
+    try {
+      const res  = await fetch(BIN_URL + '/latest', {
+        headers: { 'X-Master-Key': API_KEY }
+      });
+      const data = await res.json();
+      if (data && data.record) DB = data.record;
+    } catch (e) { /* usa cache locale */ }
+    return DB;
   }
 
-  function saveUsers(arr) {
-    localStorage.setItem(KEY_USERS, JSON.stringify(arr));
+  async function saveDB() {
+    try {
+      await fetch(BIN_URL, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': API_KEY
+        },
+        body: JSON.stringify(DB)
+      });
+    } catch (e) { /* silenzioso */ }
   }
 
-  function getTickets() {
-    try { return JSON.parse(localStorage.getItem(KEY_TICKETS) || '[]'); }
-    catch { return []; }
-  }
+  /* ── HELPERS SINCRONI (leggono dalla cache) ── */
+  function getUsers()       { return DB.users       || []; }
+  function getTickets()     { return DB.tickets     || []; }
+  function getNews()        { return DB.news        || []; }
+  function getLeaderboard() { return DB.leaderboard || []; }
 
-  function saveTickets(arr) {
-    localStorage.setItem(KEY_TICKETS, JSON.stringify(arr));
-  }
+  /* ── SESSIONE STAFF ── */
+  function isStaffLoggedIn() { return sessionStorage.getItem(KEY_SESSION) === 'authenticated'; }
+  function setStaffSession()   { sessionStorage.setItem(KEY_SESSION, 'authenticated'); }
+  function clearStaffSession() { sessionStorage.removeItem(KEY_SESSION); }
 
-  function getNews() {
-    try { return JSON.parse(localStorage.getItem(KEY_NEWS) || '[]'); }
-    catch { return []; }
-  }
-
-  function saveNews(arr) {
-    localStorage.setItem(KEY_NEWS, JSON.stringify(arr));
-  }
-
-  function getLeaderboard() {
-    try { return JSON.parse(localStorage.getItem(KEY_LEADERBOARD) || '[]'); }
-    catch { return []; }
-  }
-
-  function saveLeaderboard(arr) {
-    localStorage.setItem(KEY_LEADERBOARD, JSON.stringify(arr));
-  }
-
-  function isStaffLoggedIn() {
-    return sessionStorage.getItem(KEY_SESSION) === 'authenticated';
-  }
-
-  function setStaffSession() {
-    sessionStorage.setItem(KEY_SESSION, 'authenticated');
-  }
-
-  function clearStaffSession() {
-    sessionStorage.removeItem(KEY_SESSION);
-  }
-
-  /* ── LOGIN STAFF ── */
+  /* ── LOGIN STAFF (sincrono, credenziali hardcoded) ── */
   function staffLogin(username, password) {
     return username === STAFF_USERNAME && password === STAFF_PASSWORD;
   }
 
   /* ── REGISTRAZIONE UTENTE ── */
-  function registerUser(username, email, password) {
-    const users = getUsers();
+  async function registerUser(username, email, password) {
+    await fetchDB();
+    const users  = DB.users || [];
     const exists = users.find(u => u.username === username || u.email === email);
     if (exists) return { success: false, message: 'Nome utente o email già esistente.' };
     const newUser = {
-      id: Date.now(),
-      username,
-      email,
-      password,
+      id: Date.now(), username, email, password,
       registeredAt: new Date().toISOString()
     };
-    users.push(newUser);
-    saveUsers(users);
+    DB.users = [...users, newUser];
+    await saveDB();
     return { success: true, user: newUser };
   }
 
-  function findUser(username, password) {
-    const users = getUsers();
-    return users.find(u => u.username === username && u.password === password) || null;
+  async function findUser(username, password) {
+    await fetchDB();
+    return (DB.users || []).find(u => u.username === username && u.password === password) || null;
   }
 
   /* ── GESTIONE TICKET ── */
-  function createTicket(username, subject, message) {
-    const tickets = getTickets();
+  async function createTicket(username, subject, message) {
+    await fetchDB();
     const ticket = {
-      id: Date.now(),
-      username,
-      subject,
-      status: 'open',
+      id: Date.now(), username, subject, status: 'open',
       createdAt: new Date().toISOString(),
-      messages: [
-        { sender: username, role: 'user', text: message, time: new Date().toISOString() }
-      ]
+      messages: [{ sender: username, role: 'user', text: message, time: new Date().toISOString() }]
     };
-    tickets.push(ticket);
-    saveTickets(tickets);
+    DB.tickets = [...(DB.tickets || []), ticket];
+    await saveDB();
     return ticket;
   }
 
-  function addTicketMessage(ticketId, sender, role, text) {
-    const tickets = getTickets();
-    const ticket = tickets.find(t => t.id === ticketId);
+  async function addTicketMessage(ticketId, sender, role, text) {
+    await fetchDB();
+    const ticket = (DB.tickets || []).find(t => t.id === ticketId);
     if (!ticket) return false;
     ticket.messages.push({ sender, role, text, time: new Date().toISOString() });
-    saveTickets(tickets);
+    await saveDB();
     return true;
   }
 
-  function closeTicket(ticketId) {
-    const tickets = getTickets();
-    const ticket = tickets.find(t => t.id === ticketId);
+  async function closeTicket(ticketId) {
+    await fetchDB();
+    const ticket = (DB.tickets || []).find(t => t.id === ticketId);
     if (!ticket) return false;
     ticket.status = 'closed';
-    saveTickets(tickets);
+    await saveDB();
     return true;
   }
 
   /* ── CLASSIFICA ── */
-  function updateLeaderboard(username, points) {
-    const lb = getLeaderboard();
+  async function updateLeaderboard(username, points) {
+    await fetchDB();
+    const lb  = DB.leaderboard || [];
     const idx = lb.findIndex(e => e.username === username);
-    if (idx > -1) {
-      lb[idx].points = points;
-    } else {
-      lb.push({ username, points: parseInt(points, 10) || 0 });
-    }
+    if (idx > -1) { lb[idx].points = points; }
+    else { lb.push({ username, points: parseInt(points, 10) || 0 }); }
     lb.sort((a, b) => b.points - a.points);
-    saveLeaderboard(lb);
+    DB.leaderboard = lb;
+    await saveDB();
     return lb;
   }
 
   /* ── NOTIZIE ── */
-  function publishNews(content) {
-    const news = getNews();
+  async function publishNews(content) {
+    await fetchDB();
+    const news = DB.news || [];
     news.unshift({ id: Date.now(), content, publishedAt: new Date().toISOString() });
     if (news.length > 20) news.pop();
-    saveNews(news);
+    DB.news = news;
+    await saveDB();
     return news;
   }
 
   /* ── LOOP RENDER DASHBOARD ── */
   function startDashboardLoop() {
-    function tick() {
+    async function tick() {
+      await fetchDB();
       renderUserTable();
       renderTicketPanel();
       renderLeaderboardAdmin();
     }
     tick();
-    setInterval(tick, 1000);
+    setInterval(tick, 3000);
   }
 
   function renderUserTable() {
@@ -202,8 +184,6 @@ const GLITCH = (function () {
     }
 
     const currentIds = new Set(tickets.map(t => String(t.id)));
-
-    /* rimuovi panel di ticket non più esistenti */
     Array.from(container.querySelectorAll('[id^="ticket-"]')).forEach(el => {
       if (!currentIds.has(el.id.replace('ticket-', ''))) el.remove();
     });
@@ -212,7 +192,6 @@ const GLITCH = (function () {
       let panel = document.getElementById('ticket-' + t.id);
 
       if (!panel) {
-        /* primo rendering: crea l'intero pannello */
         panel = document.createElement('div');
         panel.className = 'panel';
         panel.style.cssText = 'margin-bottom:16px;padding:16px;';
@@ -236,13 +215,11 @@ const GLITCH = (function () {
         `;
         container.appendChild(panel);
       } else {
-        /* aggiornamenti successivi: tocca solo chat e badge, MAI l'input */
         const badge = panel.querySelector('[data-badge]');
         if (badge) {
           badge.className = 'badge ' + (t.status === 'open' ? 'badge-open' : 'badge-closed');
           badge.textContent = t.status === 'open' ? 'APERTO' : 'CHIUSO';
         }
-
         const chatBox = document.getElementById('chat-' + t.id);
         if (chatBox) {
           const newHTML = buildTicketMessages(t.messages);
@@ -252,8 +229,6 @@ const GLITCH = (function () {
             if (wasAtBottom) chatBox.scrollTop = chatBox.scrollHeight;
           }
         }
-
-        /* se il ticket è stato chiuso, rimuovi la riga reply */
         if (t.status === 'closed') {
           const row = document.getElementById('reply-row-' + t.id);
           if (row) row.remove();
@@ -279,20 +254,22 @@ const GLITCH = (function () {
   }
 
   /* ── API PUBBLICA ── */
-  function staffReply(ticketId) {
+  async function staffReply(ticketId) {
     const input = document.getElementById('reply-' + ticketId);
     if (!input || !input.value.trim()) return;
-    addTicketMessage(ticketId, 'STAFF', 'staff', input.value.trim());
+    const text = input.value.trim();
     input.value = '';
+    await addTicketMessage(ticketId, 'STAFF', 'staff', text);
   }
 
-  function staffClose(ticketId) {
+  async function staffClose(ticketId) {
     if (confirm('Vuoi chiudere questo ticket?')) {
-      closeTicket(ticketId);
+      await closeTicket(ticketId);
     }
   }
 
   return {
+    fetchDB,
     staffLogin,
     registerUser,
     findUser,
