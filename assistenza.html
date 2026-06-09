@@ -152,7 +152,8 @@
   var activeTicketId = null;
 
   /* ── INIT ── */
-  (function init() {
+  (async function init() {
+    await GLITCH.fetchDB();
     var saved = sessionStorage.getItem('glitch_user_session');
     if (saved) {
       try {
@@ -179,11 +180,11 @@
   }
 
   /* ── LOGIN ── */
-  function doLogin() {
+  async function doLogin() {
     var username = document.getElementById('login-username').value.trim();
     var password = document.getElementById('login-password').value;
     if (!username || !password) { showAlert('login-error', 'Compila tutti i campi.'); return; }
-    var user = GLITCH.findUser(username, password);
+    var user = await GLITCH.findUser(username, password);
     if (!user) { showAlert('login-error', 'Credenziali non valide. Accesso negato.'); return; }
     currentUser = user;
     sessionStorage.setItem('glitch_user_session', JSON.stringify(user));
@@ -222,7 +223,7 @@
     });
   }
 
-  function verifyOTP() {
+  async function verifyOTP() {
     var code     = document.getElementById('otp-input').value.trim();
     var password = document.getElementById('otp-password').value;
     var confirm  = document.getElementById('otp-confirm').value;
@@ -232,7 +233,7 @@
     if (password !== confirm)           { showAlert('otp-error', 'Le password non coincidono.'); return; }
     if (password.length < 4)           { showAlert('otp-error', 'La password deve essere di almeno 4 caratteri.'); return; }
 
-    var result = GLITCH.registerUser(pendingReg.username, pendingReg.email, password);
+    var result = await GLITCH.registerUser(pendingReg.username, pendingReg.email, password);
     if (!result.success) { showAlert('otp-error', result.message); return; }
 
     currentUser = result.user;
@@ -246,8 +247,9 @@
   }
 
   /* ── TICKETS ── */
-  function checkExistingTicket() {
+  async function checkExistingTicket() {
     document.getElementById('support-username').textContent = currentUser.username;
+    await GLITCH.fetchDB();
     var tickets = GLITCH.getTickets();
     var myTicket = tickets.find(function(t) {
       return t.username === currentUser.username && t.status === 'open';
@@ -262,11 +264,11 @@
     }
   }
 
-  function openTicket() {
+  async function openTicket() {
     var subject = document.getElementById('ticket-subject').value.trim();
     var message = document.getElementById('ticket-message').value.trim();
     if (!subject || !message) { showAlert('ticket-success', 'Compila oggetto e messaggio.'); return; }
-    var ticket = GLITCH.createTicket(currentUser.username, subject, message);
+    var ticket = await GLITCH.createTicket(currentUser.username, subject, message);
     activeTicketId = ticket.id;
     showActiveTicket(ticket);
   }
@@ -278,18 +280,19 @@
     refreshChat();
   }
 
-  function sendUserMessage() {
+  async function sendUserMessage() {
     if (!activeTicketId) return;
     var input = document.getElementById('chat-user-input');
     var text = input.value.trim();
     if (!text) return;
-    GLITCH.addTicketMessage(activeTicketId, currentUser.username, 'user', text);
     input.value = '';
+    await GLITCH.addTicketMessage(activeTicketId, currentUser.username, 'user', text);
     refreshChat();
   }
 
-  function refreshChat() {
+  async function refreshChat() {
     if (!activeTicketId) return;
+    await GLITCH.fetchDB();
     var tickets = GLITCH.getTickets();
     var ticket  = tickets.find(function(t) { return t.id === activeTicketId; });
     if (!ticket) return;
@@ -321,7 +324,7 @@
   setInterval(function() {
     if (currentUser && activeTicketId) refreshChat();
     if (currentUser && !activeTicketId) checkExistingTicket();
-  }, 1500);
+  }, 4000);
 </script>
 </body>
 </html>
