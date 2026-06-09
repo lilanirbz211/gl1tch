@@ -131,10 +131,10 @@
     setTimeout(function() { el.classList.remove('visible'); }, 3000);
   }
 
-  function doPublishNews() {
+  async function doPublishNews() {
     var content = document.getElementById('news-content').value.trim();
     if (!content) { showAlert('news-alert', 'Inserisci prima il contenuto della notizia.'); return; }
-    GLITCH.publishNews(content);
+    await GLITCH.publishNews(content);
     document.getElementById('news-content').value = '';
     showAlert('news-alert', 'Trasmissione inviata con successo.');
     renderNewsPreview();
@@ -152,11 +152,11 @@
     }).join('');
   }
 
-  function doUpdateLB() {
+  async function doUpdateLB() {
     var username = document.getElementById('lb-username').value.trim();
     var points   = parseInt(document.getElementById('lb-points').value, 10);
     if (!username || isNaN(points)) { showAlert('lb-alert', 'Inserisci nome utente e punti.'); return; }
-    GLITCH.updateLeaderboard(username, points);
+    await GLITCH.updateLeaderboard(username, points);
     document.getElementById('lb-username').value = '';
     document.getElementById('lb-points').value = '';
     showAlert('lb-alert', 'Classifica aggiornata.');
